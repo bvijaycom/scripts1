@@ -1,0 +1,27 @@
+---
+- hosts: RHEL
+  remote_user: PVUSERL3
+  become: true
+  become_user: root
+  become_method: sudo
+  tasks:
+    - name: Transfer the script
+      copy: src=/opt/snxt/scripts/sysdetails.sh  dest=/home/PVUSERL3 mode=0755
+
+    - name: Execute the script
+      command: sh -x /home/PVUSERL3/sysdetails.sh
+    
+    - name: Wait for job to complete it.
+      local_action: wait_for path=/home/PVUSERL3/sysdetails.sh state=absent
+
+    - name: Give Permission
+      shell: chmod 755 /home/PVUSERL3/Sysinfo*.html
+    - name: Given Ownership
+      shell: chown PVUSERL3:PVUSERL3 /home/PVUSERL3/Sysinfo*.html
+
+    - name: Copy the output
+      find: paths="/home/PVUSERL3/" recurse=no patterns="*.html"
+      register: files_to_copy
+    - name: Fetching the data
+      fetch: src={{ item.path }} dest=/Asset/{{ inventory_hostname }}
+      with_items: "{{ files_to_copy.files }}"

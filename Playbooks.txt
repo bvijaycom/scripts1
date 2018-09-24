@@ -1,0 +1,187 @@
+User deletion Ansible –playbook :-
+
+---
+- hosts: server
+  remote_user: snxt-ansible
+  become: true
+  become_user: root
+  become_method: sudo
+  tasks:
+  - name: deleting the id
+    user: name=devendra state=absent remove=yes
+
+User Creation with Sudo privilege Playbook:-
+
+---
+- hosts: server
+  remote_user: snxt-ansible
+  become: true
+  become_method: sudo
+  become_user: root
+  tasks:
+  - name: creating a user
+    user: name=vinod  home=/home/vinod shell=/bin/bash password="$6$AqyHThIO$4LtYI1WyNVKBLNu2yI7oxTIRNgf2sRIj2oRdagKRg18Ru/sCN9BZC3q1I04bOLNc4OtObph.sYoyevyi3FtZp1" state=present
+  - name: group validation
+    group:
+            name: vinod
+            state: present
+
+  - name: Allow 'vinod' group to have sudo
+    lineinfile:
+      dest: /etc/sudoers
+      state: present
+      regexp: '^%vinod'
+      line: 'vinod ALL=(ALL) ALL'
+      validate: '/usr/sbin/visudo -cf %s'
+
+Script Execution :-
+
+---
+- hosts: all
+  remote_user: SNXT-LINUX-L3
+  become: true
+  become_user: root
+  become_method: sudo
+  tasks:
+  - name: Copying the script to destination
+    copy: src=/tmp/sysinfo.sh dest=/tmp mode=0777
+  - name: Executing the script
+    script: /tmp/sysinfo.sh
+  - name: Finding the output file
+    find: paths="/tmp/" recurse=no patterns="*.html"
+    register: files_to_copy
+  - name: Fetching the file
+    fetch: src={{ item.path }} dest=/tmp/output/ flat=yes
+    with_items: "{{ files_to_copy.files }}"
+
+---
+- hosts: RHEL
+  remote_user: PVUSERL3
+  become: true
+  become_user: root
+  become_method: sudo
+  tasks:
+    - name: Transfer the script
+      copy: src=/opt/snxt/scripts/sysdetails.sh  dest=/home/PVUSERL3 mode=0755
+
+    - name: Execute the script
+      command: sh -x /home/PVUSERL3/sysdetails.sh
+
+    - name: Wait for job to complete it.
+      local_action: wait_for path=/home/PVUSERL3/sysdetails.sh state=absent
+
+    - name: Give Permission
+      shell: chmod 755 /home/PVUSERL3/Sysinfo*.html
+    - name: Given Ownership
+      shell: chown PVUSERL3:PVUSERL3 /home/PVUSERL3/Sysinfo*.html
+
+    - name: Copy the output
+      find: paths="/home/PVUSERL3/" recurse=no patterns="*.html"
+      register: files_to_copy
+    - name: Fetching the data
+      fetch: src={{ item.path }} dest=/Asset/{{ inventory_hostname }}
+      with_items: "{{ files_to_copy.files }}"
+
+---
+- name: To modify the repository
+  hosts: syslog
+  remote_user: PVUSERL3
+  become: true
+  become_user: root
+  become_method: sudo
+  tasks:
+  - name: enabling remote log forwading.
+    blockinfile:
+      dest: /etc/rsyslog.conf
+      block: |
+        *.*     @@172.23.64.137:514
+    notify: restart rsyslog
+
+  handlers:
+  - name: restart rsyslog
+    service: name=rsyslog state=restarted
+
+
+---
+- name: To install redhatrepo
+  hosts: prodsudo4
+  remote_user: PVUSERL3
+  become: true
+  become_user: root
+  become_method: sudo
+  tasks:
+  - name: copy sudo package
+    copy:  src=/yumrepo/patch/sudoredhat/sudo-1.8.6p3-28.el6_9.x86_64.rpm dest=/tmp/ mode=0777
+  - name: update sudo
+    shell: "cd /tmp/; rpm -Uvh sudo-1.8.6p3-28.el6_9.x86_64.rpm"
+
+
+---
+- name: To modify the repository
+  hosts: prod
+  remote_user: PVUSERL3
+  become: true
+  become_user: root
+  become_method: sudo
+  tasks:
+  - name: extracting the tar file
+    unarchive: src=/home/PVUSERL3/oswbb801.tar dest=/root/
+
+  - cron:
+      name: "check dirs"
+      minute: "*/10"
+      user: root
+      job: "cd /root/oswbb/;/bin/sh /root/oswbb/startOSWbb.sh 30 720 gzip > /dev/null 2>&1"
+      backup: yes
+
+
+---
+- hosts: epsilon
+  remote_user: PVUSERL3
+  become: true
+  become_user: root
+  become_method: sudo
+#  serial: 20
+  tasks:
+  - name: resetting the passwd for epsilon.
+    user: name=epsilon state=present password=$6$PKK0r1VP8bTQDqnW$juvFSV5DMApakgyAiO.ps9chJuMjTGYue.dMednZHQxhvYKyyDfKkCsyh5Bv8VjN14ydXkq69iST1jjJyZoyR1
+  - name: unlocking the user
+    command: "/sbin/pam_tally2 --user=epsilon --reset"
+
+
+#!/bin/bash
+echo "enter the user name:"
+read username
+echo "username entered is $username"
+for i in `cat list`
+do
+echo "----------- Processing for $i -------------------------------------"
+ssh -o "StrictHostKeyChecking=no" -q -t SG84839@$i << EOF
+sudo useradd $username
+echo -e "Gurgaon@123\nGurgaon@123" | sudo passwd $username
+EOF
+echo "--------------------------------------------------------------------"
+done
+
+---
+- name: To modify the repository
+  hosts: test
+  remote_user: PVUSERL3
+  become: true
+  become_user: root
+  become_method: sudo
+  tasks:
+  - name: enabling remote log forwading.
+    lineinfile:
+      dest: /etc/rsyslog.conf
+      regexp: '^\s*@@172.23.64.137:514*$'
+      line: '*.*    @172.23.64.137:514'
+      backrefs: yes
+      notify: restart rsyslog
+
+  handlers:
+  - name: restart rsyslog
+    service: name=rsyslog state=restarted
+
+
+
