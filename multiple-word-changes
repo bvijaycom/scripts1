@@ -1,0 +1,30 @@
+---
+- name: yml script to check out file manipulations
+  hosts: all
+  tasks:
+   - name: line insert at top of file
+     lineinfile:
+        path: /tmp/testFile.txt
+        line: 'Added Line 1'
+        insertbefore: BOF
+   - name: Insert a line at the end of a file.
+     lineinfile:
+        path: /tmp/testFile.txt
+        line: 'Added as last line'
+   - name: Inserting a line after a pattern
+     lineinfile:
+        path: /tmp/testFile.txt
+        line: alias ll='ls -lhA'
+        insertafter: alias.*
+   - name: Insert a line before example
+     lineinfile:
+        path: /tmp/testFile.txt
+        line: 'New line added before alias'
+        insertbefore: alias*
+   - name: Insert multiple lines using blockinfile
+     blockinfile:
+      dest: /tmp/testFile.txt
+      block: |
+        These lines are added by blockinfile module
+        Check out the marker lines
+      backup: yes
